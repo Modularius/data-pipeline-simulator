@@ -20,7 +20,7 @@
             ],
             "noises": [
             ],
-            "num-pulses": { "random-type": "uniform", "min": { "fixed-value": 0 }, "max": { "fixed-value": 200 } },
+            "num-pulses": { "random-type": "uniform", "min": { "fixed-value": 0 }, "max": { "fixed-value": 100 } },
             "time-bins": 30000,
             "timestamp": "now",
             "frame-delay-us": 20000

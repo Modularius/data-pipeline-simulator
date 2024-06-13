@@ -4,6 +4,9 @@ services:
   redpanda:
     container_name: kafka
     image: docker.redpanda.com/redpandadata/redpanda:v23.1.11
+    profiles:
+      - broker
+      - all
     command:
       - redpanda start
       - --smp 1
@@ -27,8 +30,6 @@ services:
       - 18082:18082
       - 19092:19092
       - 19644:9644
-    volumes:
-      - redpanda:/var/lib/redpanda/data
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
       interval: 15s
@@ -39,6 +40,9 @@ services:
   redpanda_console:
     container_name: kafka_console
     image: docker.redpanda.com/redpandadata/console:v2.2.4
+    profiles:
+      - broker
+      - all
     entrypoint: /bin/sh
     command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
     # We don't need the console in general, so the following command only
@@ -67,6 +71,9 @@ services:
 
   nexus-writer:
     image: ghcr.io/stfc-icd-research-and-design/supermusr-nexus-writer:$TAG
+    profiles:
+      - writer
+      - all
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
@@ -88,6 +95,9 @@ services:
 
   run-start:
     image: ghcr.io/stfc-icd-research-and-design/supermusr-run-simulator:$TAG
+    profiles:
+      - start
+      - all
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
@@ -102,6 +112,9 @@ services:
 
   simulator:
     image: ghcr.io/stfc-icd-research-and-design/supermusr-simulator:$TAG
+    profiles:
+      - start
+      - all
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
@@ -113,10 +126,13 @@ services:
     volumes:
       - ".:/home/Config"
     depends_on:
-      - nexus-writer
+      - run-start
 
   run-stop:
     image: ghcr.io/stfc-icd-research-and-design/supermusr-run-simulator:$TAG
+    profiles:
+      - stop
+      - all
     environment:
       - RUST_LOG=${RUST_LOG}
     command:
@@ -126,7 +142,4 @@ services:
      - --time=${STOP_TIME}
      - stop
     depends_on:
-      - nexus-writer
-
-volumes:
-  redpanda: null
+      - simulator
