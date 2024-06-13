@@ -1,0 +1,132 @@
+# docker-compose.yml file
+version: "3.5"
+services:
+  redpanda:
+    container_name: kafka
+    image: docker.redpanda.com/redpandadata/redpanda:v23.1.11
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      # Address the broker advertises to clients that connect to the Kafka API.
+      # Use the internal addresses to connect to the Redpanda brokers
+      # from inside the same Docker network.
+      # Use the external addresses to connect to the Redpanda brokers
+      # from outside the Docker network.
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      # Address the broker advertises to clients that connect to the HTTP Proxy.
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      # Redpanda brokers use the RPC API to communicate with each other internally.
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+    ports:
+      - 18081:18081
+      - 18082:18082
+      - 19092:19092
+      - 19644:9644
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  redpanda_console:
+    container_name: kafka_console
+    image: docker.redpanda.com/redpandadata/console:v2.2.4
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml; /app/console"
+    # We don't need the console in general, so the following command only
+    # includes it if --profile include_redpanda_console is set
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+        connect:
+          enabled: true
+          clusters:
+            - name: local-connect-cluster
+              url: http://connect:8083
+    ports:
+      - 8080:8080
+    depends_on:
+      - redpanda
+
+  nexus-writer:
+    image: ghcr.io/stfc-icd-research-and-design/supermusr-nexus-writer:$TAG
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+     - --broker=${BROKER}
+     - --consumer-group=nexus-writer
+     - --observability-address=127.0.0.1:9091
+     - --frame-event-topic=${FRAME_EVENT_TOPIC}
+     - --control-topic=${CONTROL_TOPIC}
+     - --sample-env-topic=${CONTROL_TOPIC}
+     - --log-topic=${CONTROL_TOPIC}
+     - --alarm-topic=${CONTROL_TOPIC}
+     - --cache-run-ttl-ms=1000
+     - --file-name=home/Runs
+    volumes:
+      - "${NEXUS_DEST}/:/home/Runs"
+      - "../Logs:/Logs"
+    depends_on:
+      - redpanda
+
+  run-start:
+    image: ghcr.io/stfc-icd-research-and-design/supermusr-run-simulator:$TAG
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+     - --broker=${BROKER}
+     - --topic=${CONTROL_TOPIC}
+     - --run-name=${RUN_NAME}
+     - --time=${START_TIME}
+     - start
+     - --instrument-name=${INSTRUMENT_NAME}
+    depends_on:
+      - nexus-writer
+
+  simulator:
+    image: ghcr.io/stfc-icd-research-and-design/supermusr-simulator:$TAG
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+     - --broker=${BROKER}
+     - --frame-event-topic=${FRAME_EVENT_TOPIC}
+     - defined
+     - "home/Config/${SIMULATOR_CONFIG}"
+     - --repeat=1
+    volumes:
+      - ".:/home/Config"
+    depends_on:
+      - nexus-writer
+
+  run-stop:
+    image: ghcr.io/stfc-icd-research-and-design/supermusr-run-simulator:$TAG
+    environment:
+      - RUST_LOG=${RUST_LOG}
+    command:
+     - --broker=${BROKER}
+     - --topic=${CONTROL_TOPIC}
+     - --run-name=${RUN_NAME}
+     - --time=${STOP_TIME}
+     - stop
+    depends_on:
+      - nexus-writer
+
+volumes:
+  redpanda: null
