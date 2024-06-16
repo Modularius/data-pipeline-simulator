@@ -108,7 +108,7 @@ services:
      - start
      - --instrument-name=${INSTRUMENT_NAME}
     depends_on:
-      - nexus-writer
+      - redpanda
 
   simulator:
     image: ghcr.io/stfc-icd-research-and-design/supermusr-simulator:$TAG
@@ -126,7 +126,7 @@ services:
     volumes:
       - ".:/home/Config"
     depends_on:
-      - run-start
+      - redpanda
 
   run-stop:
     image: ghcr.io/stfc-icd-research-and-design/supermusr-run-simulator:$TAG
@@ -142,4 +142,4 @@ services:
      - --time=${STOP_TIME}
      - stop
     depends_on:
-      - simulator
+      - redpanda
